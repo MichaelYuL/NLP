@@ -161,6 +161,10 @@ def INFO(text: str):
     print("[INFO]-->"+text)
 
 
+def predict():
+    pass
+
+
 if __name__ == '__main__':
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # hyper-parameters for model
