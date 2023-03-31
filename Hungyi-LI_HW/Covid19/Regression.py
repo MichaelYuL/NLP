@@ -6,7 +6,7 @@
 # @File   : Regression.py
 # @Project: NLP
 import sys
-
+import csv
 import torch, os, math, time
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 def train_valid_split(data_set, valid_ratio, seed):
     '''Split provided training data into training set and validation set'''
-    INFO("Execute Train_Valid_split!")
+    LOG("Execute Train_Valid_split!", 'INFO')
     valid_len = int(valid_ratio*len(data_set))
     train_len = int(len(data_set)-valid_len)
     train_set, valid_set = random_split(data_set, [train_len, valid_len],
@@ -35,9 +35,9 @@ def select_feature(dataset, select_all=True, select_list=None):
         feature_idx = list(range(feature.shape[1]))
     else:
         if select_list:
-            INFO("Function is still building!")
+            LOG("Function is still building!")
         else:
-            INFO("Error!")
+            LOG("Error!")
 
     return feature[:, feature_idx], target
 
@@ -100,7 +100,7 @@ def trainer(train_loader, valid_loader, model, config, device):
     # TODO: L2 regularization (optimizer(weight decay...) or implement by your self).
     optimizer = torch.optim.SGD(model.parameters(), lr=config['learning_rate'], momentum=0.9)
     writer = SummaryWriter()  # Writer of tensoboard.
-
+    writer.add_graph(model, input_to_model=torch.randn(1, 117))
     if not os.path.isdir('./models'):
         os.mkdir('./models')  # Create directory of saving models.
 
@@ -157,12 +157,32 @@ def trainer(train_loader, valid_loader, model, config, device):
             return
 
 
-def INFO(text: str):
-    print("[INFO]-->"+text)
+def predict(test_loader, model, device):
+    model.eval() # Set your model to evaluation mode.
+    preds = []
+    for x in tqdm(test_loader):
+        x = x.to(device)
+        with torch.no_grad():
+            pred = model(x)
+            preds.append(pred.detach().cpu())
+    preds = torch.cat(preds, dim=0).numpy()
+    return preds
 
 
-def predict():
-    pass
+def save_pred(preds, file):
+    ''' Save predictions to specified file '''
+    with open(file, 'w') as fp:
+        writer = csv.writer(fp)
+        writer.writerow(['id', 'tested_positive'])
+        for i, p in enumerate(preds):
+            writer.writerow([i, p])
+
+
+def LOG(text: str, flag="INFO"):
+    if flag=="INFO":
+        print("[INFO]-->"+text)
+    elif flag=="ERROR":
+        print("[ERROR] ***")
 
 
 if __name__ == '__main__':
@@ -172,38 +192,44 @@ if __name__ == '__main__':
         'seed': 5201314,  # Your seed number, you can pick your lucky number. :)
         'select_all': True,  # Whether to use all features.
         'valid_ratio': 0.2,  # validation_size = train_size * valid_ratio
-        'n_epochs': 300,  # Number of epochs.
+        'n_epochs': 3000,  # Number of epochs.
         'batch_size': 256,
         'learning_rate': 1e-5,
         'early_stop': 400,  # If model has not improved for this many consecutive ep ochs, stop training.
         'save_path': 'models/model.ckpt'  # Your model will be saved here.
     }
-    INFO(f"Training device --> {device}")
-    INFO(f"Model will be saved in directory --> {os.path.join(os.getcwd(), config.get('save_path'))}")
+    LOG(f"Training device --> {device}")
+    LOG(f"Model will be saved in directory --> {os.path.join(os.getcwd(), config.get('save_path'))}")
 
     # Set seed for reproducibility
     same_seed(config['seed'])
 
     train_data, test_data = pd.read_csv('./covid.train.csv').values, pd.read_csv('./covid.test.csv').values
     train_data, valid_data = train_valid_split(train_data, config['valid_ratio'], config['seed'])
-    INFO(f"Train_data --> {train_data.shape}   "+f"Valid_data --> {valid_data.shape}")
-    INFO(f"Test_data --> {test_data.shape}")
+    LOG(f"Train_data --> {train_data.shape}   "+f"Valid_data --> {valid_data.shape}")
+    LOG(f"Test_data --> {test_data.shape}")
     x_train, y_train = select_feature(train_data, config['select_all'])
     x_valid, y_valid = select_feature(valid_data, config['select_all'])
-    x_test, y_test = select_feature(test_data, config['select_all'])
+    x_test = test_data
 
     train_dataset, valid_dataset, test_dataset = COVID19Dataset(x_train, y_train), \
                                                  COVID19Dataset(x_valid, y_valid), \
                                                  COVID19Dataset(x_test)
-    INFO("COVID19Datasets are all created!")
+    LOG("COVID19Datasets are all created!")
     # Pytorch data loader loads pytorch dataset into batches.
     train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, pin_memory=True)
     valid_loader = DataLoader(valid_dataset, batch_size=config['batch_size'], shuffle=True, pin_memory=True)
     test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, pin_memory=True)
-    INFO("Dataloaders are all created!")
-
+    LOG("Dataloaders are all created!")
+    LOG("Training started----------")
     model = My_Model(input_dim=x_train.shape[1]).to(device)  # put your model and data on the same computation device.
     trainer(train_loader, valid_loader, model, config, device)
+    LOG("Training ended------------")
+    LOG("Testing start!")
+    model = My_Model(input_dim=x_train.shape[1]).to(device)
+    model.load_state_dict(torch.load(config['save_path']))
+    preds = predict(test_loader, model, device)
+    save_pred(preds, 'pred.csv')
 
 
 
