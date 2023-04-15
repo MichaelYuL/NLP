@@ -156,4 +156,5 @@ if __name__ == '__main__':
     print(word_segment_viterbi("今天的课程内容很有意思"))
     print(word_segment_viterbi("经常有意见分歧"))
     utils.LOG("TEST", 'Test Done!')
-
+    #lll
+    utils.LOG()
