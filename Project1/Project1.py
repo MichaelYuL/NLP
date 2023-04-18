@@ -8,8 +8,9 @@
 
 import pandas as pd
 import numpy as np
+from jsonpath import jsonpath
+import json
 from Tookit import utils
-import math
 
 
 def load_words(path):
@@ -130,8 +131,36 @@ def Backward_Segmentation(sentence, max_len):
     return temp_segmentation
 
 
+def read_corpus(file_path):
+    """
+    query --> qlist = ["问题1"， “问题2”， “问题3” ....]
+    answer --> alist = ["答案1", "答案2", "答案3" ....]
+    务必要让每一个问题和答案对应起来（下标位置一致）
+    """
+
+    with open(file_path, 'r') as qa:
+        qas = json.load(qa)
+        utils.LOG("INFO", f"Already load QAs from {file_path}")
+
+    print("Database Bersion --> "+jsonpath(qas, "$.version")[0])
+    qlist, alist = [], []
+    for section in jsonpath(qas, "$.data")[0]:
+        for paragraph in jsonpath(section, "$.paragraphs")[0]:
+            for qa in jsonpath(paragraph, "$.qas")[0]:
+                if not jsonpath(qa, "$.answers[0].text"):
+                    continue
+                query = jsonpath(qa, "$.question")[0]
+                answer = jsonpath(qa, "$.answers[0].text")[0]
+                qlist.append(query)
+                alist.append(answer)
+
+    assert len(qlist) == len(alist)  # 确保长度一样
+    print(len(qlist))
+    return qlist, alist
+
+
 if __name__ == '__main__':
-    dic_path = './data/综合类中文词库.xlsx'
+    '''dic_path = './data/综合类中文词库.xlsx'
     # TODO : step-1 load chinese words from dic.txt
     dic_words = load_words(dic_path)
     utils.LOG('INFO', 'Loading...DONE!')
@@ -155,6 +184,9 @@ if __name__ == '__main__':
     print(word_segment_viterbi("北京的天气真好啊"))
     print(word_segment_viterbi("今天的课程内容很有意思"))
     print(word_segment_viterbi("经常有意见分歧"))
-    utils.LOG("TEST", 'Test Done!')
-    #lll
-    utils.LOG()
+    utils.LOG("TEST", 'Test Done!')'''
+    # TODO : step-3-1 load QAs
+    utils.LOG("INFO", "Build FQA system!")
+    utils.LOG("INFO", "Load question-answer pairs...")
+    qlist, alist = read_corpus("./data/train-v2.0.json")
+    utils.LOG("INFO", "Loading Done")
